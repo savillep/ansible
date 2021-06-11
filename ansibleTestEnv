@@ -1,0 +1,83 @@
+#!/bin/bash
+# ------------------------------------------------------------------------------
+# Maintainer:   Peter Saville   
+# Contact:      
+# 
+# Description:
+# Start or shudown the virtual machines used for testing with Ansible
+#
+# If no parameter (default) | -c | --create are passed to script, then
+# Check the current state of each virtual machine
+# if the state is not 'running' then attempt to start
+# if more than 3 attmepts to start vm have failed, then quit
+#
+# Check to see if network interfaces are up and static ips are reachable
+# NB: default libvirt network has dhcp range set to 100-254 and I have
+# reserved ips 192.168.122.2 - 192.168.122.99 for static addresses
+# on the default network
+#
+# if parameters -s | --shutdown are given, check the state of the domains
+# and shutdown if state = "running"
+#
+# Ansible test machines ( 1 x control and 3 x clients ) have static ip addresses
+# in the range 192.168.122.70 - 192.168.122.73
+#
+# TODO: the numAttemtps logic is not fully implemented or correct, Currently, it
+# will only prevent some unforseen infinite loop during startup.
+#
+# Change Log:
+# Created: Thu 10 Jun 2021 19:41:52 AEST
+# Modified: 
+# ------------------------------------------------------------------------------
+
+VERSION=0.0.2
+USAGE="ansibleTestEnv [[-c | --create ] | [-s | --shutdown]]"
+
+if [[ $# -eq 0 ]] || [[ $1 = "-c" ]] || [[ $1 = "--create" ]] 
+then
+    for i in {1..4}
+    do
+        vmName="rocky8-0$i"
+        vmState=$(sudo virsh domstate --domain $vmName)
+        numAttemptsToStart=1
+
+        echo "$vmName is currently: $vmState"
+
+        # the numAttempts logic is not fully implemented 
+        while [[ $vmState != "running" ]] && [[ $numAttemptsToStart -le 3 ]]
+        do
+            echo "Starting $vmName ($numAttemptsToStart)"
+            sudo virsh start --domain $vmName
+            sleep 3
+            numAttemptsToStart=$(( numAttemptsToStart +1 ))
+            vmState=$(sudo virsh domstate --domain $vmName)
+        done
+    done
+
+    while [[ $(sudo nmap -sn 192.168.122.0/24 | grep -i "nmap scan.*\.7[0-3]" | wc -l) -lt 4 ]]
+    do
+        echo "waiting for network interfaces to stand up..."
+    done
+    # if starting a machine failed for some reason - it will be apparent here
+    # even though the logic for handling this is not complete.
+    sudo virsh list --all | grep -i "rocky"
+    echo -e 'Ansible test environment ready to go!\n'
+    ssh root@192.168.122.70
+elif [[ $1 = "--shutdown" ]] || [[ $1 = "-s" ]] 
+then
+    for i in {1..4}
+    do
+        vmName="rocky8-0$i"
+        vmState=$(sudo virsh domstate --domain $vmName)
+        echo "$vmName is currently: $vmState"
+        if [[ $vmState = "running" ]] 
+        then
+            sudo virsh shutdown $vmName
+            sleep 1
+        fi
+    done
+    sleep 2
+    sudo virsh list --all | grep -i "rocky"
+else
+    echo -e "Usage: $USAGE \n"
+fi
