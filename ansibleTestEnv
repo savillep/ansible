@@ -4,7 +4,7 @@
 # Contact:      
 # 
 # Description:
-# Start or shudown the virtual machines used for testing with Ansible
+# Start or shutdown the virtual machines used for testing with Ansible
 #
 # If no parameter (default) | -c | --create are passed to script, then
 # Check the current state of each virtual machine
